@@ -10,93 +10,93 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-IP_REMOTO = os.getenv('IP_REMOTO')
+YOUR_IP = os.getenv('IP_REMOTO')
 
-# Dispositivo di esecuzione
+# Define the execution device (use GPU if available, otherwise fallback to CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Ottieni il percorso della directory corrente (dove si trova il codice)
+# Get the path of the current directory (where the script is located)
 current_dir = os.path.dirname(__file__)
 
-# Specifica il percorso relativo del modello
+# Specify the relative path to the YOLO model file
 model_path = os.path.join(current_dir, "best.pt")
 
-print(f"Cercando il file del modello in: {model_path}")
+print(f"Looking for the model file at: {model_path}")
 
-# Carica il modello YOLOv8
+# Load the YOLOv8 model
 if not os.path.exists(model_path):
-    print("Il file non esiste.")
+    print("The file does not exist.")
     exit(1)
 
-print("Il file esiste. Procedo con il caricamento del modello.")
+print("The file exists. Proceeding to load the model.")
 try:
-    # Inizializza il modello con i pesi custom
+    # Initialize the YOLO model with custom weights
     model = YOLO(model_path)
-    print("Modello caricato con successo.")
+    print("Model loaded successfully.")
 except Exception as e:
-    print(f"Errore nel caricamento del modello: {e}")
+    print(f"Error loading the model: {e}")
     exit(1)
 
-# Funzione di pre-processamento per il modello (non necessaria con YOLOv8 integrato)
+# Preprocessing function for the model (not required with YOLOv8 built-in preprocessing)
 def preprocess(frame):
-    return frame  # YOLOv8 gestisce il pre-processamento internamente
+    return frame  # YOLOv8 handles preprocessing internally
 
-# Funzione per eseguire il rilevamento degli oggetti
+# Function to perform object detection
 def detect_objects(frame):
     results = model.predict(source=frame, save=False, save_txt=False)
     return results
 
-# Funzione per disegnare le bounding box sul frame
+# Function to draw bounding boxes on the frame
 def draw_boxes(frame, results):
-    # Disegna i risultati direttamente sul frame
+    # Draw the results directly on the frame
     annotated_frame = results[0].plot()
     return annotated_frame
 
-# Funzione per connettersi al WebSocket e ricevere i frame
+# Function to connect to the WebSocket and receive frames
 async def connect_to_websocket():
-    websocket_url = f"wss://{IP_REMOTO}:443"  # URL del WebSocket sicuro
-    print(f"Connessione al server WebSocket: {websocket_url}")
+    websocket_url = f"wss://{YOUR_IP}:443"  # Secure WebSocket URL
+    print(f"Connecting to WebSocket server: {websocket_url}")
 
-    # Crea un contesto SSL che ignora i certificati non validi
+    # Create an SSL context that ignores invalid certificates
     ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False  # Disabilita il controllo del nome host
-    ssl_context.verify_mode = ssl.CERT_NONE  # Non verificare il certificato
+    ssl_context.check_hostname = False  # Disable hostname verification
+    ssl_context.verify_mode = ssl.CERT_NONE  # Do not verify the certificate
 
-    # Connettiamo al WebSocket con il contesto SSL modificato
+    # Connect to the WebSocket using the modified SSL context
     async with websockets.connect(websocket_url, ssl=ssl_context) as websocket:
-        print("Connessione WebSocket stabilita.")
+        print("WebSocket connection established.")
         
         while True:
             try:
-                # Ricevi i dati del frame dal WebSocket
+                # Receive frame data from the WebSocket
                 frame_data = await websocket.recv()
 
-                # Converti i dati ricevuti in un'immagine
+                # Convert the received data into an image
                 np_frame = np.frombuffer(frame_data, dtype=np.uint8)
                 frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
 
                 if frame is None:
-                    print("Errore nel decodificare il frame.")
+                    print("Error decoding the frame.")
                     continue
 
-                # Esegui il rilevamento degli oggetti
+                # Perform object detection
                 predictions = detect_objects(frame)
 
-                # Disegna le box sul frame
+                # Draw bounding boxes on the frame
                 frame_with_boxes = draw_boxes(frame, predictions)
 
-                # Mostra il frame con le box disegnate
+                # Display the frame with bounding boxes
                 cv2.imshow("Video Stream with Object Detection", frame_with_boxes)
 
-                # Esci dal loop premendo 'q'
+                # Exit the loop by pressing 'q'
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
             except Exception as e:
-                print(f"Errore nella connessione o nel ricevere i frame: {e}")
+                print(f"Error in connection or receiving frames: {e}")
                 break
 
         cv2.destroyAllWindows()
 
-# Esegui la connessione al WebSocket
+# Run the WebSocket connection
 if __name__ == "__main__":
     asyncio.run(connect_to_websocket())

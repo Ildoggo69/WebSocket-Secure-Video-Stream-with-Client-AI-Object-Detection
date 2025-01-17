@@ -8,76 +8,75 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-IP_REMOTO = os.getenv('IP_REMOTO')
-LOG_FILE = os.getenv('LOG_FILE')
-CERT_PEM = os.getenv('CERT_PEM')
-KEY_PEM = os.getenv('KEY_PEM')
+PATH_TO_LOGFILE = os.getenv('LOG_FILE')
+PATH_TO_CERT = os.getenv('CERT_PEM')
+PATH_TO_KEY = os.getenv('KEY_PEM')
 
 
-# Configurazione del logging
-logfile = {LOG_FILE}
+# Configure logging
+logfile = PATH_TO_LOGFILE
 logging.basicConfig(filename=logfile, level=logging.INFO, format="%(asctime)s - [line:%(lineno)d] - %(levelname)s: %(message)s")
 logger = logging.getLogger()
 
-# Elenco dei client connessi
+# List of connected clients
 connected_clients = set()
 
-# Funzione per gestire i client
+# Function to handle connected clients
 async def handle_client(websocket, path):
-    # Aggiungi il client all'elenco
+    # Add the client to the set of connected clients
     connected_clients.add(websocket)
-    logger.info(f"Nuovo client connesso. Totale: {len(connected_clients)}")
+    logger.info(f"New client connected. Total: {len(connected_clients)}")
 
     try:
-        # Mantieni la connessione aperta
+        # Keep the connection open
         await websocket.wait_closed()
     finally:
-        # Rimuovi il client quando si disconnette
+        # Remove the client when it disconnects
         connected_clients.remove(websocket)
-        logger.info(f"Client disconnesso. Totale: {len(connected_clients)}")
+        logger.info(f"Client disconnected. Total: {len(connected_clients)}")
 
-# Funzione per trasmettere i frame ai client connessi
+# Function to broadcast video frames to connected clients
 async def broadcast_video():
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap = cv2.VideoCapture(0)  # Open the default camera (index 0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Set video width to 640 pixels
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)  # Set video height to 480 pixels
 
     try:
         while True:
-            ret, frame = cap.read()
+            ret, frame = cap.read()  # Read a frame from the camera
             if not ret:
-                logger.error("Errore durante la lettura del frame.")
+                logger.error("Error reading frame.")
                 continue
 
-            # Codifica il frame come JPEG
+            # Encode the frame as JPEG
             _, buffer = cv2.imencode('.jpg', frame)
             frame_data = buffer.tobytes()
 
-            # Invia il frame a tutti i client connessi
+            # Send the frame to all connected clients
             if connected_clients:
                 await asyncio.wait([client.send(frame_data) for client in connected_clients])
 
-            # Frame rate ~30 FPS
+            # Limit the frame rate to approximately 30 FPS
             await asyncio.sleep(0.150)
     finally:
-        cap.release()
+        cap.release()  # Release the camera when done
 
-# Funzione per avviare il server WSS
+# Function to start the WSS server
 async def start_server():
-    # Configurazione SSL
+    # Configure SSL context
     ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ssl_context.load_cert_chain(certfile={CERT_PEM}, keyfile={KEY_PEM})
+    ssl_context.load_cert_chain(certfile=PATH_TO_CERT, keyfile=PATH_TO_KEY)
     
-    # Ignora la verifica del certificato
+    # Ignore certificate verification
     ssl_context.verify_mode = ssl.CERT_NONE
 
-    # Avvia il server WebSocket sicuro (WSS)
+    # Start the secure WebSocket server (WSS)
     server = await websockets.serve(handle_client, "0.0.0.0", 8765, ssl=ssl_context)
-    logger.info("Server WebSocket sicuro in esecuzione su wss://0.0.0.0:8765")
+    logger.info("Secure WebSocket server running on wss://0.0.0.0:8765")
 
-    # Esegui il server
+    # Keep the server running
     await server.wait_closed()
 
-# Funzione principale che avvia sia il server che il broadcast video
+# Main function to start both the server and video broadcast
 async def main():
     await asyncio.gather(start_server(), broadcast_video())
