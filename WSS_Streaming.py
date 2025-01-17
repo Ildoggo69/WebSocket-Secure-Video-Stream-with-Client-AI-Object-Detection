@@ -12,7 +12,6 @@ PATH_TO_LOGFILE = os.getenv('LOG_FILE')
 PATH_TO_CERT = os.getenv('CERT_PEM')
 PATH_TO_KEY = os.getenv('KEY_PEM')
 
-
 # Configure logging
 logfile = PATH_TO_LOGFILE
 logging.basicConfig(filename=logfile, level=logging.INFO, format="%(asctime)s - [line:%(lineno)d] - %(levelname)s: %(message)s")
@@ -71,8 +70,8 @@ async def start_server():
     ssl_context.verify_mode = ssl.CERT_NONE
 
     # Start the secure WebSocket server (WSS)
-    server = await websockets.serve(handle_client, "0.0.0.0", 8765, ssl=ssl_context)
-    logger.info("Secure WebSocket server running on wss://0.0.0.0:8765")
+    server = await websockets.serve(handle_client, "0.0.0.0", 443, ssl=ssl_context)
+    logger.info("Secure WebSocket server running on wss://0.0.0.0:443")
 
     # Keep the server running
     await server.wait_closed()
